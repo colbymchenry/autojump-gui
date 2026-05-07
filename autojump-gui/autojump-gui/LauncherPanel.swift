@@ -1,12 +1,18 @@
 import AppKit
+import Combine
 import SwiftUI
 
 final class LauncherPanel: NSPanel {
     private let viewModel: LauncherViewModel
     private var keyMonitor: Any?
+    private var cancellables = Set<AnyCancellable>()
 
     init(viewModel: LauncherViewModel) {
         self.viewModel = viewModel
+
+        let hostingController = NSHostingController(rootView: LauncherView(viewModel: viewModel))
+        hostingController.sizingOptions = .preferredContentSize
+
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: 680, height: 64),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -24,29 +30,13 @@ final class LauncherPanel: NSPanel {
         isMovableByWindowBackground = false
         animationBehavior = .utilityWindow
 
-        let host = NSHostingView(rootView: LauncherView(viewModel: viewModel))
-        host.translatesAutoresizingMaskIntoConstraints = false
+        contentViewController = hostingController
 
-        let visualEffect = NSVisualEffectView()
-        visualEffect.material = .hudWindow
-        visualEffect.blendingMode = .behindWindow
-        visualEffect.state = .active
-        visualEffect.wantsLayer = true
-        visualEffect.layer?.cornerRadius = 14
-        visualEffect.layer?.cornerCurve = .continuous
-        visualEffect.layer?.masksToBounds = true
-        visualEffect.layer?.borderWidth = 0.5
-        visualEffect.layer?.borderColor = NSColor.white.withAlphaComponent(0.08).cgColor
-
-        visualEffect.addSubview(host)
-        NSLayoutConstraint.activate([
-            host.topAnchor.constraint(equalTo: visualEffect.topAnchor),
-            host.bottomAnchor.constraint(equalTo: visualEffect.bottomAnchor),
-            host.leadingAnchor.constraint(equalTo: visualEffect.leadingAnchor),
-            host.trailingAnchor.constraint(equalTo: visualEffect.trailingAnchor),
-        ])
-
-        contentView = visualEffect
+        // Belt-and-suspenders: when results change, force a layout/resize on the next runloop.
+        viewModel.$results
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.syncSizeToContent() }
+            .store(in: &cancellables)
     }
 
     override var canBecomeKey: Bool { true }
@@ -67,6 +57,21 @@ final class LauncherPanel: NSPanel {
     override func resignKey() {
         super.resignKey()
         dismiss()
+    }
+
+    // Keep the top edge fixed when the panel grows or shrinks.
+    override func setContentSize(_ size: NSSize) {
+        let topY = frame.maxY
+        super.setContentSize(size)
+        setFrameOrigin(NSPoint(x: frame.origin.x, y: topY - frame.height))
+    }
+
+    private func syncSizeToContent() {
+        guard let view = contentViewController?.view else { return }
+        view.layoutSubtreeIfNeeded()
+        let fitting = view.fittingSize
+        guard fitting.width > 0, fitting.height > 0, fitting != frame.size else { return }
+        setContentSize(fitting)
     }
 
     private func positionAtSpotlightLocation() {
@@ -111,7 +116,6 @@ final class LauncherPanel: NSPanel {
     }
 }
 
-// kVK_* constants live in Carbon; bridge the ones we use.
 private let kVK_Escape = 0x35
 private let kVK_Return = 0x24
 private let kVK_ANSI_KeypadEnter = 0x4C

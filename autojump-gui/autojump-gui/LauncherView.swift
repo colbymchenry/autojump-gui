@@ -12,10 +12,18 @@ struct LauncherView: View {
             if !viewModel.results.isEmpty {
                 Divider().opacity(0.35)
                 resultsList
+            } else if !viewModel.query.trimmingCharacters(in: .whitespaces).isEmpty {
+                Divider().opacity(0.35)
+                emptyState
             }
         }
         .frame(width: 680)
-        .frame(maxHeight: 480)
+        .background(VisualEffectBackground())
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+        )
         .onAppear {
             queryFocused = true
         }
@@ -35,27 +43,26 @@ struct LauncherView: View {
     }
 
     private var resultsList: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(Array(viewModel.results.enumerated()), id: \.element.id) { index, entry in
-                        ResultRow(entry: entry, isSelected: index == viewModel.selection)
-                            .id(index)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                viewModel.selection = index
-                                viewModel.commit()
-                            }
+        VStack(spacing: 0) {
+            ForEach(Array(viewModel.results.enumerated()), id: \.element.id) { index, entry in
+                ResultRow(entry: entry, isSelected: index == viewModel.selection)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        viewModel.selection = index
+                        viewModel.commit()
                     }
-                }
-                .padding(.vertical, 6)
-            }
-            .onChange(of: viewModel.selection) { _, new in
-                withAnimation(.easeOut(duration: 0.12)) {
-                    proxy.scrollTo(new, anchor: .center)
-                }
             }
         }
+        .padding(.vertical, 6)
+    }
+
+    private var emptyState: some View {
+        Text("No matches")
+            .font(.system(size: 13))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 14)
     }
 }
 
@@ -112,4 +119,16 @@ private struct FolderIcon: NSViewRepresentable {
     func updateNSView(_ nsView: NSImageView, context: Context) {
         nsView.image = NSWorkspace.shared.icon(forFile: path)
     }
+}
+
+private struct VisualEffectBackground: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .hudWindow
+        view.blendingMode = .behindWindow
+        view.state = .active
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }

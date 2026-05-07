@@ -2,9 +2,7 @@ import Combine
 import Foundation
 
 final class LauncherViewModel: ObservableObject {
-    @Published var query: String = "" {
-        didSet { recompute() }
-    }
+    @Published var query: String = ""
     @Published private(set) var results: [AutojumpEntry] = []
     @Published var selection: Int = 0
 
@@ -12,15 +10,20 @@ final class LauncherViewModel: ObservableObject {
     var onDismiss: (() -> Void)?
 
     private let store: AutojumpStore
+    private var cancellables = Set<AnyCancellable>()
 
     init(store: AutojumpStore) {
         self.store = store
+        $query
+            .sink { [weak self] newQuery in
+                self?.recompute(query: newQuery)
+            }
+            .store(in: &cancellables)
     }
 
     func reset() {
         query = ""
         selection = 0
-        recompute()
     }
 
     func moveUp() {
@@ -42,7 +45,7 @@ final class LauncherViewModel: ObservableObject {
         onDismiss?()
     }
 
-    private func recompute() {
+    private func recompute(query: String) {
         results = store.search(query: query)
         if selection >= results.count {
             selection = results.isEmpty ? 0 : results.count - 1
