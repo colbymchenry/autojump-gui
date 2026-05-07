@@ -33,16 +33,83 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.button?.image = NSImage(systemSymbolName: "arrow.uturn.forward.circle",
                                      accessibilityDescription: "Autojump")
         let menu = NSMenu()
+
         let show = NSMenuItem(title: "Show launcher", action: #selector(togglePanel), keyEquivalent: "j")
         show.keyEquivalentModifierMask = [.command]
         show.target = self
         menu.addItem(show)
+
         menu.addItem(.separator())
+
+        let install = NSMenuItem(title: "Install CLI integration…", action: #selector(installCLI), keyEquivalent: "")
+        install.target = self
+        menu.addItem(install)
+
+        let uninstall = NSMenuItem(title: "Uninstall CLI integration", action: #selector(uninstallCLI), keyEquivalent: "")
+        uninstall.target = self
+        menu.addItem(uninstall)
+
+        menu.addItem(.separator())
+
         let quit = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
         item.menu = menu
         statusItem = item
+    }
+
+    @objc private func installCLI() {
+        guard let shell = Shell.detect() else {
+            showAlert(title: "Unsupported shell",
+                      message: "$SHELL is not zsh, bash, fish, or tcsh. Set $SHELL or install the integration manually.")
+            return
+        }
+        let alreadyInstalled = CLIIntegration.isInstalled(in: shell)
+        let confirm = NSAlert()
+        confirm.messageText = alreadyInstalled
+            ? "Reinstall autojump CLI integration?"
+            : "Install autojump CLI integration?"
+        confirm.informativeText = """
+        This will copy the autojump scripts to:
+            ~/Library/Application Support/autojump-gui/cli/
+
+        And add a block to ~/\(shell.rcFileURL.lastPathComponent) that prepends that directory to PATH and sources the \(shell.rawValue) hook.
+
+        You can undo this from the menu later.
+        """
+        confirm.addButton(withTitle: alreadyInstalled ? "Reinstall" : "Install")
+        confirm.addButton(withTitle: "Cancel")
+        guard confirm.runModal() == .alertFirstButtonReturn else { return }
+        do {
+            try CLIIntegration.install(shell: shell)
+            showAlert(title: "CLI integration installed",
+                      message: "Open a new terminal window and try `j <folder>`.")
+        } catch {
+            showAlert(title: "Install failed", message: error.localizedDescription)
+        }
+    }
+
+    @objc private func uninstallCLI() {
+        guard let shell = Shell.detect() else { return }
+        guard CLIIntegration.isInstalled(in: shell) else {
+            showAlert(title: "Nothing to uninstall",
+                      message: "No autojump-gui block found in ~/\(shell.rcFileURL.lastPathComponent).")
+            return
+        }
+        do {
+            try CLIIntegration.uninstall(shell: shell)
+            showAlert(title: "CLI integration removed",
+                      message: "The block has been removed from ~/\(shell.rcFileURL.lastPathComponent). Open a new terminal for the change to take effect.")
+        } catch {
+            showAlert(title: "Uninstall failed", message: error.localizedDescription)
+        }
+    }
+
+    private func showAlert(title: String, message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.runModal()
     }
 
     private func installHotKey() {
