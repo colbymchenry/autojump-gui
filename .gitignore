@@ -8,3 +8,11 @@ __pycache__
 .pytest_cache
 .tox
 tags
+
+# autojump-gui (Xcode app)
+.DS_Store
+autojump-gui/build/
+autojump-gui/scripts/release.env
+xcuserdata/
+*.xcuserstate
+*.dmg
