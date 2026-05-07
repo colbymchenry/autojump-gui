@@ -1,12 +1,15 @@
 import AppKit
 import Carbon.HIToolbox
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let store = AutojumpStore()
     private lazy var viewModel = LauncherViewModel(store: store)
     private var panel: LauncherPanel?
     private var hotKey: HotKey?
     private var statusItem: NSStatusItem?
+    private var finderTracker: FinderTracker?
+    private var finderTrackingMenuItem: NSMenuItem?
+    private var accessibilityMenuItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -22,6 +25,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel = LauncherPanel(viewModel: viewModel)
         installStatusItem()
         installHotKey()
+        installFinderTracker()
+    }
+
+    private func installFinderTracker() {
+        finderTracker = FinderTracker()
+        if FinderTracker.isEnabledByPreference {
+            finderTracker?.start()
+        }
+        updateFinderTrackingMenuItem()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -51,11 +63,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(.separator())
 
+        let finderTracking = NSMenuItem(title: "Track Finder navigation",
+                                        action: #selector(toggleFinderTracking),
+                                        keyEquivalent: "")
+        finderTracking.target = self
+        menu.addItem(finderTracking)
+        finderTrackingMenuItem = finderTracking
+
+        let accessibility = NSMenuItem(title: "Grant Accessibility access…",
+                                       action: #selector(grantAccessibility),
+                                       keyEquivalent: "")
+        accessibility.target = self
+        menu.addItem(accessibility)
+        accessibilityMenuItem = accessibility
+
+        menu.addItem(.separator())
+
         let quit = NSMenuItem(title: "Quit", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
+        menu.delegate = self
         item.menu = menu
         statusItem = item
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        finderTracker?.refreshAccessibilityState()
+        updateFinderTrackingMenuItem()
+        updateAccessibilityMenuItem()
     }
 
     @objc private func installCLI() {
@@ -135,6 +170,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func hidePanel() {
         panel?.dismiss()
+    }
+
+    @objc private func toggleFinderTracking() {
+        let newValue = !FinderTracker.isEnabledByPreference
+        FinderTracker.setEnabledPreference(newValue)
+        if newValue {
+            finderTracker?.start()
+        } else {
+            finderTracker?.stop()
+        }
+        updateFinderTrackingMenuItem()
+    }
+
+    private func updateFinderTrackingMenuItem() {
+        finderTrackingMenuItem?.state = FinderTracker.isEnabledByPreference ? .on : .off
+    }
+
+    @objc private func grantAccessibility() {
+        if FinderTracker.hasAccessibilityPermission {
+            let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+            if let url { NSWorkspace.shared.open(url) }
+            return
+        }
+        FinderTracker.requestAccessibilityPermission()
+    }
+
+    private func updateAccessibilityMenuItem() {
+        guard let item = accessibilityMenuItem else { return }
+        if FinderTracker.hasAccessibilityPermission {
+            item.title = "Accessibility access granted"
+            item.state = .on
+            item.isEnabled = true
+        } else {
+            item.title = "Grant Accessibility access…"
+            item.state = .off
+            item.isEnabled = true
+        }
     }
 
     @objc private func quit() {

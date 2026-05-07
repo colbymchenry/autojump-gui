@@ -27,7 +27,7 @@ if ! command -v create-dmg >/dev/null; then
 fi
 
 SCHEME="autojump-gui"
-APP_NAME="autojump-gui"
+APP_NAME="Autojump"
 PROJECT="$PROJECT_DIR/autojump-gui.xcodeproj"
 BUILD_DIR="$PROJECT_DIR/build"
 ARCHIVE="$BUILD_DIR/$APP_NAME.xcarchive"
