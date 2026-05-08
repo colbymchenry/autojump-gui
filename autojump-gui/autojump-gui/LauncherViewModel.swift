@@ -6,7 +6,7 @@ final class LauncherViewModel: ObservableObject {
     @Published private(set) var results: [AutojumpEntry] = []
     @Published var selection: Int = 0
 
-    var onSelect: ((String) -> Void)?
+    var onSelect: ((String, LaunchModifier?) -> Void)?
     var onDismiss: (() -> Void)?
 
     private let store: AutojumpStore
@@ -36,9 +36,9 @@ final class LauncherViewModel: ObservableObject {
         selection = min(results.count - 1, selection + 1)
     }
 
-    func commit() {
+    func commit(modifier: LaunchModifier? = nil) {
         guard !results.isEmpty, results.indices.contains(selection) else { return }
-        onSelect?(results[selection].path)
+        onSelect?(results[selection].path, modifier)
     }
 
     func dismiss() {

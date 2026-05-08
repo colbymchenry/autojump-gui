@@ -94,7 +94,8 @@ final class LauncherPanel: NSPanel {
                 self.viewModel.dismiss()
                 return nil
             case kVK_Return, kVK_ANSI_KeypadEnter:
-                self.viewModel.commit()
+                let modifier = LaunchModifier.from(eventFlags: event.modifierFlags)
+                self.viewModel.commit(modifier: modifier)
                 return nil
             case kVK_DownArrow:
                 self.viewModel.moveDown()

@@ -21,11 +21,6 @@ API_KEY_PATH="${API_KEY_PATH/#\$HOME/$HOME}"
 API_KEY_PATH="${API_KEY_PATH/#\~/$HOME}"
 [[ -f "$API_KEY_PATH" ]] || { echo "error: API key not found at $API_KEY_PATH" >&2; exit 1; }
 
-if ! command -v create-dmg >/dev/null; then
-    echo "error: create-dmg not installed. Run:  brew install create-dmg" >&2
-    exit 1
-fi
-
 SCHEME="autojump-gui"
 APP_NAME="Autojump"
 PROJECT="$PROJECT_DIR/autojump-gui.xcodeproj"
@@ -70,17 +65,23 @@ echo "==> Stapling notarization ticket to .app"
 xcrun stapler staple "$APP_PATH"
 
 echo "==> Building DMG"
+# hdiutil-based packaging: no AppleScript, no Finder dependency. The DMG ships the .app
+# alongside an /Applications symlink so users can drag-install. We deliberately skipped
+# create-dmg here because its Finder-styling AppleScript hangs indefinitely on modern
+# macOS without explicit Automation→Finder permission for the parent process.
 rm -f "$DMG_PATH"
-create-dmg \
-    --volname "$APP_NAME $VERSION" \
-    --window-size 540 380 \
-    --icon-size 96 \
-    --icon "$APP_NAME.app" 140 190 \
-    --app-drop-link 400 190 \
-    --hide-extension "$APP_NAME.app" \
-    --no-internet-enable \
-    "$DMG_PATH" \
-    "$APP_PATH"
+DMG_STAGE="$BUILD_DIR/dmg-stage"
+rm -rf "$DMG_STAGE"
+mkdir -p "$DMG_STAGE"
+cp -R "$APP_PATH" "$DMG_STAGE/"
+ln -s /Applications "$DMG_STAGE/Applications"
+hdiutil create \
+    -volname "$APP_NAME $VERSION" \
+    -srcfolder "$DMG_STAGE" \
+    -ov \
+    -format UDZO \
+    "$DMG_PATH"
+rm -rf "$DMG_STAGE"
 
 echo "==> Notarizing DMG"
 xcrun notarytool submit "$DMG_PATH" \

@@ -14,8 +14,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
-        viewModel.onSelect = { [weak self] path in
-            NSWorkspace.shared.open(URL(fileURLWithPath: path))
+        viewModel.onSelect = { [weak self] path, modifier in
+            if let modifier {
+                let action = LaunchActionsStore.shared.action(for: modifier)
+                ActionLauncher.launch(action, path: path)
+            } else {
+                ActionLauncher.openInFinder(path)
+            }
             self?.hidePanel()
         }
         viewModel.onDismiss = { [weak self] in
@@ -76,6 +81,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         accessibility.target = self
         menu.addItem(accessibility)
         accessibilityMenuItem = accessibility
+
+        menu.addItem(.separator())
+
+        let settings = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        settings.keyEquivalentModifierMask = [.command]
+        settings.target = self
+        menu.addItem(settings)
 
         menu.addItem(.separator())
 
@@ -207,6 +219,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.state = .off
             item.isEnabled = true
         }
+    }
+
+    @objc private func openSettings() {
+        SettingsWindowController.shared.show()
     }
 
     @objc private func quit() {
