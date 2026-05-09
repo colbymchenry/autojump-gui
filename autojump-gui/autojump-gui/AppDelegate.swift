@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var finderTracker: FinderTracker?
     private var finderTrackingMenuItem: NSMenuItem?
     private var accessibilityMenuItem: NSMenuItem?
+    private var launchAtLoginMenuItem: NSMenuItem?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -31,6 +32,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         installStatusItem()
         installHotKey()
         installFinderTracker()
+        promptLaunchAtLoginIfNeeded()
+    }
+
+    private func promptLaunchAtLoginIfNeeded() {
+        guard !LaunchAtLogin.hasPrompted else { return }
+        DispatchQueue.main.async { [weak self] in
+            let alert = NSAlert()
+            alert.messageText = "Launch Autojump at login?"
+            alert.informativeText = """
+            Autojump lives in the menu bar and is most useful when it's always available. \
+            You can change this any time from the menu bar icon.
+            """
+            alert.addButton(withTitle: "Launch at login")
+            alert.addButton(withTitle: "Not now")
+            let enable = alert.runModal() == .alertFirstButtonReturn
+            LaunchAtLogin.markPrompted()
+            if enable {
+                if case .failure(let error) = LaunchAtLogin.setEnabled(true) {
+                    self?.showAlert(title: "Couldn't enable launch at login",
+                                    message: error.localizedDescription)
+                }
+            }
+            self?.updateLaunchAtLoginMenuItem()
+        }
     }
 
     private func installFinderTracker() {
@@ -84,6 +109,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        let launchAtLogin = NSMenuItem(title: "Launch at login",
+                                       action: #selector(toggleLaunchAtLogin),
+                                       keyEquivalent: "")
+        launchAtLogin.target = self
+        menu.addItem(launchAtLogin)
+        launchAtLoginMenuItem = launchAtLogin
+
+        menu.addItem(.separator())
+
         let settings = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         settings.keyEquivalentModifierMask = [.command]
         settings.target = self
@@ -103,6 +137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         finderTracker?.refreshAccessibilityState()
         updateFinderTrackingMenuItem()
         updateAccessibilityMenuItem()
+        updateLaunchAtLoginMenuItem()
     }
 
     @objc private func installCLI() {
@@ -219,6 +254,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.state = .off
             item.isEnabled = true
         }
+    }
+
+    @objc private func toggleLaunchAtLogin() {
+        let newValue = !LaunchAtLogin.isEnabled
+        if case .failure(let error) = LaunchAtLogin.setEnabled(newValue) {
+            showAlert(title: newValue
+                        ? "Couldn't enable launch at login"
+                        : "Couldn't disable launch at login",
+                      message: error.localizedDescription)
+        }
+        updateLaunchAtLoginMenuItem()
+    }
+
+    private func updateLaunchAtLoginMenuItem() {
+        launchAtLoginMenuItem?.state = LaunchAtLogin.isEnabled ? .on : .off
     }
 
     @objc private func openSettings() {
